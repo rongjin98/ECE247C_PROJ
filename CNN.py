@@ -5,7 +5,7 @@ import torch.optim as optim
 import numpy as np
 
 class CNN(nn.Module):
-    def __init__(self, drop_out_p = 0.5):
+    def __init__(self, input_dim,  drop_out_p = 0.5):
         super(CNN, self).__init__()
         #Initial input size = (22, 1000,1) -> (C, H, W)
         self.conv1 = conv_block(in_channels=22, 
@@ -34,19 +34,9 @@ class CNN(nn.Module):
                                 drop_out=drop_out_p,
                                 kernel_size = (10,1),
                                 padding = "same")
-        
-        #input size = (200, 12,1)
-        #need flatten during forward()
-        self.fc = nn.Sequential(
-            nn.Linear(200*12, 144), 
-            nn.BatchNorm1d(144),
-            nn.ELU(),
-            nn.Dropout(drop_out_p),
-            nn.Linear(144,44),
-            nn.BatchNorm1d(44),
-            nn.ELU(),
-            nn.Linear(44,4)
-        )
+                                
+        out_shape = torch.flatten(self.conv4(self.conv3(self.conv2(self.conv1(torch.zeros(1,*input_dim)))))).shape[0]
+        self.fc1 = fc_block(in_shape=out_shape, out_channels=4, drop_out=drop_out_p)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -56,7 +46,7 @@ class CNN(nn.Module):
         
         batch_num = x.size(0)
         x = x.view(batch_num, -1) #change x to (N, input_dim)
-        out = self.fc(x)
+        out = self.fc1(x)
         return out
 
 
@@ -76,6 +66,23 @@ class conv_block(nn.Module):
         x = self.dropout(x)
         return x
 
+class fc_block(nn.Module):
+    def __init__(self, in_shape, out_channels, drop_out=0.5):
+        super(fc_block,self).__init__()
+        self.fc = nn.Sequential(
+            nn.Linear(in_shape, 144), 
+            nn.BatchNorm1d(144),
+            nn.ELU(),
+            nn.Dropout(drop_out),
+            nn.Linear(144,44),
+            nn.BatchNorm1d(44),
+            nn.ELU(),
+            nn.Linear(44,out_channels)
+        )
+    
+    def forward(self,x):
+        x = self.fc(x)
+        return x
 # test = torch.rand(1000,22,1000,1)
 # model = CNN()
 

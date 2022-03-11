@@ -3,9 +3,10 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 import os
+# from sklearn.model_selection import KFold
 
 #Overload pytorch Dataset for Customization
-class Dataset(Dataset):
+class Dataset(torch.utils.data.Dataset):
     def __init__(self, X, Y, transform=None, target_transfrom=None):
         super().__init__()
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -70,22 +71,27 @@ def data_loader(path, verbose = False, subjects = [0,1,2,3,4,5,6,7,8]):
             print('The X train & valid data size is {}'.format(X_train_valid.shape))
             print('The X test data size is {}'.format(X_test.shape))
 
-    return X_train_valid, X_test, y_train_valid, y_test
+    return X_train_valid,  y_train_valid, X_test, y_test
 
 #Perform Data Preprocessing
-def data_process(X_train, X_test, y_train, y_test, data_crop = 0.5, sub_sample = 2, average_step = 2, add_noise = True, verbose = True):
+def data_process(X_train, X_test, y_train, y_test, **kwargs):
     total_x_train = None
     total_y_train = None
 
     total_x_test = None
     total_y_test = None
 
+    data_crop = kwargs.pop('data_crop',0.5)
+    sub_sample = kwargs.pop('sub_sample', 2)
+    average_step = kwargs.pop('average_step', 2)
+    add_noise = kwargs.pop('add_noise',True)
+    verbose = kwargs.pop('verbose',False)
     #Recall X -> [N, C, H]
 
     #1. Data Cropping
-    N = int(data_crop*X_train.shape[2])
-    X_train = X_train[:, :, 0:N]
-    X_test = X_test[:,:, 0:N]
+    H = int(data_crop*X_train.shape[2])
+    X_train = X_train[:, :, 0:H]
+    X_test = X_test[:,:, 0:H]
     if verbose:
         print('Shape of X train after trimming is: {}'.format(X_train.shape))
     
@@ -140,16 +146,19 @@ def data_process(X_train, X_test, y_train, y_test, data_crop = 0.5, sub_sample =
         print('Shape of Y train after subsampling and concatenating:',total_y_train.shape)
         print('Shape of X test after subsampling and concatenating:',total_x_test.shape)
         print('Shape of Y train after subsampling and concatenating:',total_y_test.shape)
+    
+    # #5. Reshape into (N,C,H,W)
+    # total_x_train = total_x_train.reshape(total_x_train.shape[0], total_x_train.shape[1], total_x_train.shape[2], 1)
+    # total_x_test = total_y_test.reshape(total_x_test.shape[0], total_x_test.shape[1], total_x_test.shape[2], 1)
 
     return total_x_train,total_y_train,total_x_test,total_y_test
 
-#Reshape Data into (N,C,H,W) and put into pytorch DATALOADER
-def Dataloader_torch(x_train_valid,y_train_valid,x_test,y_test, batch_size = 64):
-    '''
-    1. Split the train_valid data into train & valid seperate part
-    2. Reshape the datae from (N,C,H) to (N,C,H,W)
-    2. make Dataset takes(x,y,transform)
-    3. make Dataloader takes(Dataset, N_size)
-    '''
-
-    return NotImplemented
+#Reshape Data into (N,C,H,W) and put into pytorch Datasets
+def Dataset_torch(x,y,transform = None, verbose = False):
+    x = x.reshape(x.shape[0], x.shape[1], x.shape[2], 1)
+    if verbose:
+        print('Shape of x set after adding width info:',x.shape)
+    
+    dataset = Dataset(x, y, transform=transform)
+    x_shape = x.shape
+    return x_shape[1:len(x_shape)],dataset
