@@ -10,21 +10,23 @@ path = "project_data/"
 X_train_valid, y_train_valid, X_test, y_test = data_loader(path,False)
 X_train_valid, y_train_valid, X_test, y_test = data_process(X_train_valid, 
         X_test, y_train_valid, y_test, verbose = False)
-x_shape,train_dataset = Dataset_torch(X_train_valid,y_train_valid,verbose=False)
 x_test_shape,test_dataset = Dataset_torch(X_test,y_test,verbose=False)
 
-print(x_test_shape)
-
-train_loader = DataLoader(train_dataset,batch_size=64)
 test_loader = DataLoader(test_dataset, len(test_dataset))
 
 
-num_epoch = 100
-device = "cuda" if torch.cuda.is_available() else "cpu"
-lr = 3e-4
-criterion = nn.CrossEntropyLoss()
+def reset_model(m):
+  for layer in m.children():
+    if hasattr(layer, 'reset_parameters'):
+      layer.reset_parameters()
 
-model = train(x_shape, train_dataset, 'CNN', criterion, k_folds = 5,num_epochs = 100, verbose = True)
+model = nn.Linear(3,3)
+lr = 3e-4
+optimizer = optim.Adam(model.parameters(), lr=lr)
+sth = optimizer.state_dict
+
+model1 = torch.jit.load('model_scripted1.pt')
+model2 = torch.jit.load('averaged_model.pt')
 
 def check_accuracy(x_valid,y_valid,model):
     num_correct = 0
@@ -33,6 +35,11 @@ def check_accuracy(x_valid,y_valid,model):
     model.eval()
 
     with torch.no_grad():
+        # x_valid = torch.from_numpy(x_valid)
+        # x_valid = x_valid.type(torch.float32).to(device=device)
+        # y_valid = torch.from_numpy(y_valid) 
+        # y_valid = y_valid.type(torch.LongTensor).to(device=device)
+
         scores = model(x_valid)
         _,predictions = scores.max(1)
         num_correct += (predictions == y_valid).sum()
@@ -44,5 +51,5 @@ def check_accuracy(x_valid,y_valid,model):
     return acc
 
 for x,y in test_loader:
-    check_accuracy(x,y,model)
-
+    check_accuracy(x,y,model1)
+    check_accuracy(x,y,model2)
