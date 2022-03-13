@@ -1,6 +1,7 @@
 import enum
 from re import X
 from sched import scheduler
+from unicodedata import bidirectional
 from unittest import TestLoader
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,68 +9,17 @@ import json
 from collections import defaultdict
 
 import torch
+import os
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader, SubsetRandomSampler
+from torch.utils.data import DataLoader, SubsetRandomSampler
 from torch.autograd import Variable
 from sklearn.model_selection import KFold
 
 
 from CNN import *
-
-'''
-Function might required
-1. __init__()
-        """
-        Construct a new Solver instance.
-
-        Required arguments:
-        - model: A model object conforming to the API described above
-        - data: A dictionary of training and validation data containing:
-          'X_train': Array, shape (N_train, d_1, ..., d_k) of training images
-          'X_val': Array, shape (N_val, d_1, ..., d_k) of validation images
-          'y_train': Array, shape (N_train,) of labels for training images
-          'y_val': Array, shape (N_val,) of labels for validation images
-
-        Optional arguments:
-        - update_rule: A string giving the name of an update rule in optim.py.
-          Default is 'sgd'.
-        - optim_config: A dictionary containing hyperparameters that will be
-          passed to the chosen update rule. Each update rule requires different
-          hyperparameters (see optim.py) but all update rules require a
-          'learning_rate' parameter so that should always be present.
-        - lr_decay: A scalar for learning rate decay; after each epoch the
-          learning rate is multiplied by this value.
-        - batch_size: Size of minibatches used to compute loss and gradient
-          during training.
-        - num_epochs: The number of epochs to run for during training.
-        - print_every: Integer; training losses will be printed every
-          print_every iterations.
-        - verbose: Boolean; if set to false then no output will be printed
-          during training.
-        - K_fold
-        ""
-    
-    Call reset() every initialization
-
-2. _reset()
-   -->reset the model & every hypermeters
-
-3. check_accuracy()
-
-
-1. Training Function
-   1.K-cross validation
-    -->record loss (for plot)
-    -->record train_accuracy, validate_accuracy (for plot)
-   2.tqdm (optinonal)
-   3. return the trained Model 
-
-   
-
-2. Test Function
-   1. check test accuracy
-'''
+from CRNN import CNN_GRU, CNN_LSTM
+from data_loader import *
 
 def check_accuracy(x_valid,y_valid,model,criterion):
     num_correct = 0
@@ -89,12 +39,6 @@ def check_accuracy(x_valid,y_valid,model,criterion):
     model.train()
     acc = float(num_correct) / float(num_samples)*100
     return loss,acc
-
-# def reset_model(m):
-#   for name, module in m.named_children():
-#     if hasattr(module, 'reset_parameters'):
-#       print('Layer Name: ', name)
-#       module.reset_parameters()
   
 
 def train(x_shape, data_set, model_name, criterion, **kwargs):
@@ -106,43 +50,74 @@ def train(x_shape, data_set, model_name, criterion, **kwargs):
     batch_size = kwargs.pop('batch_size', 64)
     num_epochs = kwargs.pop('num_epochs', 50)
     verbose = kwargs.pop('verbose', False)
+    subset_sampler = kwargs.pop('subsampler', True)
+
+    dropout = kwargs.pop('dropout', 0.5)
+    bidirection = kwargs.pop('birdiection', True)
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    
 
     loss_history = defaultdict(list)
     results = defaultdict(float)
     train_acc_history = defaultdict(list)
     valid_acc_history = defaultdict(list)
+    valid_loss_history = defaultdict(list)
+    
 
     torch.manual_seed(42)
     kfold = KFold(n_splits=k_folds, shuffle=True)
 
-    # if lr_decay:
-    #     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
+    #Path for Data Saving
+    data_path = model_name + '_exp_data'
+    model_path = model_name + '_trained_model'
+    if os.path.exists(data_path) == False:
+      os.makedirs(data_path)
+    
+    if os.path.exists(model_path) == False:
+      os.makedirs(model_path)
+    
     
     for fold, (train_idx, valid_idx) in enumerate(kfold.split(data_set)):
-        train_subsample = SubsetRandomSampler(train_idx)
-        valid_subsample = SubsetRandomSampler(valid_idx)
+        
+        if subset_sampler:
+          train_subsample = SubsetRandomSampler(train_idx)
+          valid_subsample = SubsetRandomSampler(valid_idx)
+          trainloader = DataLoader(data_set, batch_size, sampler = train_subsample)
+          validloader = DataLoader(data_set, batch_size, sampler = valid_subsample)
+        else:
+          x_train,y_train = data_set.__getitem__(train_idx)
+          x_valid,y_valid = data_set.__getitem__(valid_idx)
+        
+          train_set = Dataset(x_train, y_train, transform=None)
+          valid_set = Dataset(x_valid, y_valid, transform=None)
+          trainloader = DataLoader(train_set, batch_size)
+          validloader = DataLoader(valid_set, batch_size)
+          
 
         if verbose:
           print(f'===============FOLD {fold}===============')
-        
-        trainloader = DataLoader(data_set, batch_size, sampler = train_subsample)
-        validloader = DataLoader(data_set, batch_size, sampler = valid_subsample)
 
         #Initial model for each fold
         if model_name == 'CNN':
-          model = CNN(x_shape).to(device)
+          model = CNN(x_shape, dropout).to(device)
+        elif model_name == 'LSTM':
+          model = CNN_LSTM(x_shape, dropout, bidirection).to(device)
+        elif model_name == 'GRU':
+          model = CNN_GRU(x_shape, dropout, bidirection).to(device)
 
         optimizer = torch.optim.Adam(model.parameters(),lr)
+        if lr_decay:
+          scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
         print('Model Initialized')
 
         for epoch in range(num_epochs):
           avg_loss = 0.0
           num_correct_train = 0
           num_sample_train = 0
-          
+          model.train(True)
+
           for batch_idx, (data, target) in enumerate(trainloader):
-            model.train(True)
             data = data.to(device)
             target = target.to(device)
 
@@ -163,30 +138,40 @@ def train(x_shape, data_set, model_name, criterion, **kwargs):
             num_sample_train += pred_train.size(0)
 
             train_acc = 100.0* (num_correct_train/num_sample_train)
-            train_acc_history[fold] = train_acc.item()
+            train_acc_history[fold].append(train_acc.item())
 
             if verbose:
-              if batch_idx % 100 == 99 and epoch %10 == 9:
-                print('Loss afer %2d epoch: %.3f, with the accuracy %.3f' %((epoch+1), avg_loss/100, train_acc))
-
+              if batch_idx % 100 == 99 and epoch %10 == 9 :
+                print('Loss afer %2d epoch: %.3f, with the accuracy %.3f' %((epoch+1), avg_loss/100, train_acc))  
             del (data,target)
+
+          #Because of high correlation, valid accuracy is not typically useful
+          if lr_decay:
+            scheduler.step(avg_loss)
         
           #Start validation
           num_correct = 0
           num_samples = 0
+          num_batch = 0
+          model.eval()
+
           with torch.no_grad():
             for i, (x_val, y_val) in enumerate(validloader):
-              model.eval()
+              num_batch += 1
               outputs = model(x_val)
+              valid_loss = criterion(outputs,y_val)
+              valid_loss_history[fold].append(valid_loss.item())
 
               _,predict = outputs.max(1)
               num_correct += (predict == y_val).sum()
               num_samples += predict.size(0)
           
               acc = 100.0 * (num_correct/num_samples)
-              valid_acc_history[fold] = acc.item()
+              valid_acc_history[fold].append(acc.item())
               if verbose and epoch % 10 == 9 and i == 1:
                 print(f'The validation accuracy at epoch {epoch+1} is: {acc:.2f}')
+
+          
           results[fold] = acc.item()
 
 
@@ -194,7 +179,7 @@ def train(x_shape, data_set, model_name, criterion, **kwargs):
         if fold != k_folds-1:
           # Save the last model weights
           model_scripted1 = torch.jit.script(model)
-          file_name = 'trained_model/model_scripted' + str(fold) +'.pt'
+          file_name = model_path + '/model_scripted' + str(fold) +'.pt'
           model_scripted1.save(file_name)
           del(model,optimizer)
           print(f'Deleted mode')
@@ -210,22 +195,43 @@ def train(x_shape, data_set, model_name, criterion, **kwargs):
 
     # Dump loss history and result history to jason
     print('Saving training results...')
-    with open('exp_data/loss_history.json', 'w') as f:
+    
+    
+    with open((data_path+'/loss_history.json'), 'w') as f:
       json.dump(loss_history,f)
     
-    with open('exp_data/valid_results.json','w') as f:
+    with open((data_path+'/valid_results.json'),'w') as f:
       json.dump(results,f)
     
-    with open('exp_data/train_acc_history.json','w') as f:
+    with open((data_path+'/train_acc_history.json'),'w') as f:
       json.dump(train_acc_history,f)
     
-    with open('exp_data/valid_acc_history.json','w') as f:
+    with open((data_path+'/valid_acc_history.json'),'w') as f:
       json.dump(valid_acc_history,f)
     
+    with open((data_path+'/valid_loss_history.json'),'w') as f:
+      json.dump(valid_loss_history,f)
+    
     model_scripted1 = torch.jit.script(model)
-    file_name = 'trained_model/model_scripted' + str(fold) +'.pt'
+    file_name = model_path + '/model_scripted' + str(fold) +'.pt'
     model_scripted1.save(file_name)
 
     torch.cuda.empty_cache()
     return model
 
+def test(test_dataset, model, verbose=True):
+  num_correct = 0
+  num_samples = 0
+  model.eval()
+  test_loader = DataLoader(test_dataset, batch_size=len(test_dataset))
+  with torch.no_grad():
+    for (x_val, y_val) in test_loader:
+      outputs = model(x_val)
+      _,predict = outputs.max(1)
+      num_correct += (predict == y_val).sum()
+      num_samples += predict.size(0)
+          
+      acc = 100.0 * (num_correct/num_samples)
+      if verbose:
+        print(f'The test accuracy is: {acc:.2f} %')
+  return acc

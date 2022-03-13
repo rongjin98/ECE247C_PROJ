@@ -10,8 +10,15 @@ class Dataset(torch.utils.data.Dataset):
     def __init__(self, X, Y, transform=None, target_transfrom=None):
         super().__init__()
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.X = torch.FloatTensor(X).to(device)
-        self.Y = torch.LongTensor(Y).to(device)
+        if torch.is_tensor(X):
+            self.X = X 
+        else:
+            self.X = torch.FloatTensor(X).to(device)
+        
+        if torch.is_tensor(Y):
+            self.Y = Y
+        else:
+            self.Y = torch.LongTensor(Y).to(device)
         self.transform = transform
         self.target_transform = target_transfrom
         

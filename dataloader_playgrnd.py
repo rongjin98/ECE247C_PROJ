@@ -13,7 +13,6 @@ X_train_valid, y_train_valid, X_test, y_test = data_process(X_train_valid,
 x_shape,train_dataset = Dataset_torch(X_train_valid,y_train_valid,verbose=False)
 x_test_shape,test_dataset = Dataset_torch(X_test,y_test,verbose=False)
 
-print(x_test_shape)
 
 train_loader = DataLoader(train_dataset,batch_size=64)
 test_loader = DataLoader(test_dataset, len(test_dataset))
@@ -24,7 +23,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 lr = 3e-4
 criterion = nn.CrossEntropyLoss()
 
-model = train(x_shape, train_dataset, 'CNN', criterion, k_folds = 5,num_epochs = 100, verbose = True)
+model = train(x_shape, train_dataset, 'LSTM', criterion, k_folds = 5,num_epochs = 100, dropout = 0.6, subsampler = True, lr_decay=True, verbose = True, bidirection = False)
 
 def check_accuracy(x_valid,y_valid,model):
     num_correct = 0
@@ -43,6 +42,5 @@ def check_accuracy(x_valid,y_valid,model):
     acc = float(num_correct) / float(num_samples)*100
     return acc
 
-for x,y in test_loader:
-    check_accuracy(x,y,model)
+acc = test(test_dataset, model)
 
