@@ -7,28 +7,28 @@ import numpy as np
 class CNN(nn.Module):
     def __init__(self, input_dim,  drop_out_p = 0.5):
         super(CNN, self).__init__()
-        #Initial input size = (22, 1000,1) -> (C, H, W)
+        #Initial input size = (22, H,1) -> (C, H, W)
         self.conv1 = conv_block(in_channels=22, 
                                 out_channels=25,
                                 drop_out=drop_out_p, 
                                 kernel_size = (10,1),
                                 padding = "same")
 
-        #input size = (25, 334,1)
+        #input size = (25, H/3,1)
         self.conv2 = conv_block(in_channels=25, 
                                 out_channels=50,
                                 drop_out=drop_out_p,
                                 kernel_size = (10,1),
                                 padding = "same")
         
-        #input size = (50, 112,1)
+        #input size = (50, H/9,1)
         self.conv3 = conv_block(in_channels=50, 
                                 out_channels=100,
                                 drop_out=drop_out_p, 
                                 kernel_size = (10,1),
                                 padding = "same")
         
-        #input size = (100, 38,1)
+        #input size = (100, H/27,1)
         self.conv4 = conv_block(in_channels=100, 
                                 out_channels=200, 
                                 drop_out=drop_out_p,

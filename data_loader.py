@@ -70,7 +70,7 @@ def data_loader(path, verbose = False, subjects = [0,1,2,3,4,5,6,7,8]):
             print('The X train & valid data size is {}'.format(X_train_valid_subjects.shape))
             print('The X test data size is {}'.format(X_test_subjects.shape))
         
-        return X_train_valid_subjects, X_test_subjects, y_train_valid_subjects, y_test_subjects
+        return X_train_valid_subjects, y_train_valid_subjects, X_test_subjects, y_test_subjects
     
     else:
 
@@ -79,6 +79,16 @@ def data_loader(path, verbose = False, subjects = [0,1,2,3,4,5,6,7,8]):
             print('The X test data size is {}'.format(X_test.shape))
 
     return X_train_valid,  y_train_valid, X_test, y_test
+
+#Perform Data Crop
+def crop_data(X_train, X_test, y_train, y_test, data_crop, verbose = False):
+    H = int(data_crop*X_train.shape[2])
+    X_train = X_train[:, :, 0:H]
+    X_test = X_test[:,:, 0:H]
+    if verbose:
+        print('Shape of X train after trimming is: {}'.format(X_train.shape))
+    
+    return X_train,y_train,X_test,y_test
 
 #Perform Data Preprocessing
 def data_process(X_train, X_test, y_train, y_test, **kwargs):
