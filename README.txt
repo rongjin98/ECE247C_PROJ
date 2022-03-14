@@ -1,0 +1,1 @@
+1.To make scripts runnable, project data should be placed in the folder named 'project_data'
